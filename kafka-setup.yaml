@@ -1,0 +1,86 @@
+version: "3.9"
+
+services:
+  kafka:
+    image: apache/kafka:latest
+    container_name: kafka
+    restart: unless-stopped
+    ports:
+      - "29092:29092"   # external
+      - "19092:9092"     # internal
+    environment:
+      # -------- Adjust this to your Docker host/LAN IP --------
+      - HOST_IP=localhost
+      # --------------------------------------------------------
+
+      # === KRaft (no ZooKeeper) config ===
+      - KAFKA_NODE_ID=1
+      - KAFKA_PROCESS_ROLES=controller,broker
+      - KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:29092
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+
+      # === Optional convenience ===
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+
+        # 1) Generate a minimal KRaft server.properties
+        cat >/tmp/server.properties <<'EOF'
+        process.roles=controller,broker
+        node.id=1
+
+        controller.listener.names=CONTROLLER
+        controller.quorum.voters=1@kafka:9093
+
+        listeners=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:29092
+        listener.security.protocol.map=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+        advertised.listeners=PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+        inter.broker.listener.name=PLAINTEXT
+
+        log.dirs=/var/lib/kafka/data
+
+        # convenience
+        auto.create.topics.enable=true
+        offsets.topic.replication.factor=1
+        transaction.state.log.replication.factor=1
+        transaction.state.log.min.isr=1
+        EOF
+
+        # 2) Format KRaft storage only once (checks for meta.properties)
+        if [ ! -f "/var/lib/kafka/data/meta.properties" ]; then
+          /opt/kafka/bin/kafka-storage.sh format \
+            --ignore-formatted \
+            --cluster-id "$(/opt/kafka/bin/kafka-storage.sh random-uuid)" \
+            --config /tmp/server.properties
+        fi
+
+        # 3) Start broker
+        exec /opt/kafka/bin/kafka-server-start.sh /tmp/server.properties
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    restart: unless-stopped
+    depends_on: [kafka]
+    ports:
+      - "4288:8080"
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      - SERVER_PORT=8080
+
+volumes:
+  kafka_data:

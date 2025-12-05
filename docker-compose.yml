@@ -8,6 +8,8 @@ services:
     ports:
       - "29092:29092"   # external
       - "19092:9092"     # internal
+    networks:
+      - kafka-network
     environment:
       # -------- Adjust this to your Docker host/LAN IP --------
       - HOST_IP=localhost
@@ -84,3 +86,7 @@ services:
 
 volumes:
   kafka_data:
+
+networks:
+  kafka-network:
+    driver: bridge

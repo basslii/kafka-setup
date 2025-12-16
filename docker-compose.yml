@@ -81,11 +81,22 @@ services:
     networks:
       - local-network
 
-    ports:
-      - "4288:8080"
+#    ports:
+#      - "4288:8080"
+    labels:
+      - "traefik.enable=true"
+
+      # Router
+      - "traefik.http.routers.kafka-ui.rule=Host(`docker.local`) && PathPrefix(`/kafka-dashboard`)"
+      - "traefik.http.routers.kafka-ui.entrypoints=websecure"
+      - "traefik.http.routers.kafka-ui.tls=true"
+
+      # Service
+      - "traefik.http.services.kafka-ui.loadbalancer.server.port=8080"
     environment:
       - KAFKA_CLUSTERS_0_NAME=kafka
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      - SERVER_SERVLET_CONTEXT_PATH=/kafka-dashboard
 
 volumes:
   kafka_data:
